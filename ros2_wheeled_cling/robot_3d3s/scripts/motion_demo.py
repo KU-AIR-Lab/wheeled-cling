@@ -6,6 +6,10 @@ Cycles automatically through:
   Rotate CCW  →  Rotate CW  →  Forward  →  Backward  →
   Slide Left  →  Slide Right  →  (repeat)
 
+Steering angles are guaranteed to stay within [-90°, +90°] at all times.
+When the IK solution would exceed this range, the wheel direction is flipped
+instead (same physical motion, no collision risk).
+
 Two modes
 ---------
 RViz mode (default):
@@ -27,23 +31,6 @@ RViz only:
 Gazebo:
   Terminal 1:  ros2 launch robot_3d3s gazebo.launch.py
   Terminal 2:  ros2 run robot_3d3s motion_demo.py --ros-args -p gazebo:=true
-
-Kinematics summary
-------------------
-Leg angles from +X (CCW): a1=0°, a2=120°, a3=240°
-Wheel contact radius from robot centre: R_c = 0.414 m
-Wheel radius: R_w = 0.050 m
-
-For spin-axis angle phi_i = a_i - s_i the body-frame rolling constraint is:
-  -sin(phi_i)*vx + cos(phi_i)*vy + (sin(phi_i)*py_i + cos(phi_i)*px_i)*wz
-      = wheel_vel_i * R_w
-
-Solving gives: translation v = 0.10 m/s, rotation w = 0.242 rad/s @ speed=2 rad/s.
-
-Steering presets
-  STEER_ROTATE  = [  0°,   0°,   0°]   → tangential push, pure spin
-  STEER_FORWARD = [+90°, -150°, -30°]  → all spin-axes at 270° → +X
-  STEER_LATERAL = [  0°, +120°, -120°] → all spin-axes at   0° → +Y
 """
 
 import math
@@ -61,67 +48,88 @@ from tf2_ros import TransformBroadcaster
 
 R_WHEEL   = 0.050          # wheel radius (m)
 R_LEG     = 0.38905        # steering-pivot radius from robot centre (m)
-R_CONTACT = R_LEG + 0.025  # wheel contact point radius (m) = 0.41405
+R_CONTACT = R_LEG + 0.025  # wheel contact point radius (m)
 
-LEG_ANGLES = [0.0, 2*math.pi/3, 4*math.pi/3]   # a1, a2, a3 in rad
+LEG_ANGLES = [0.0, 2*math.pi/3, 4*math.pi/3]
 
-# Contact point (x, y) in body frame for each wheel
 P_CONTACT = [
-    ( R_CONTACT * math.cos(a),  R_CONTACT * math.sin(a))
+    (R_CONTACT * math.cos(a), R_CONTACT * math.sin(a))
     for a in LEG_ANGLES
 ]
 
 # ── Kinematic constants ───────────────────────────────────────────────────────
 
-DRIVE_SPEED = 2.0    # rad/s applied to all wheels during driving
-STEER_RATE  = 1.2    # rad/s steering transition rate
+DRIVE_SPEED = 2.0   # rad/s wheel speed magnitude for all motions
+STEER_RATE  = 1.2   # rad/s steering ramp speed
 PUBLISH_HZ  = 50
 
-# Steering angle sets  [s_1, s_2, s_3]
-STEER_ROTATE  = [0.0,              0.0,             0.0           ]
-STEER_FORWARD = [math.pi/2,       -5*math.pi/6,    -math.pi/6    ]
-STEER_LATERAL = [0.0,              2*math.pi/3,    -2*math.pi/3   ]
+# Velocity commands derived from DRIVE_SPEED so all motions use equal wheel effort
+V_LINEAR  = DRIVE_SPEED * R_WHEEL             # 0.10 m/s  → DRIVE_SPEED rad/s at wheel
+V_ANGULAR = DRIVE_SPEED * R_WHEEL / R_CONTACT  # 0.242 rad/s → DRIVE_SPEED rad/s at wheel
 
-# Motion sequence: (label, target_steering, wheel_sign, drive_sec)
-# wheel_sign is negative for "positive" motion because rolling-forward requires
-# the contact patch to move backward → negative joint angle rate (right-hand rule
-# around x_wheel with y_wheel=UP and z_wheel=rolling-forward gives this convention).
+# Motion sequence: (label, vx, vy, omega, drive_seconds)
+# Steering angles are computed via IK — always in [-90°, +90°].
 MOTION_SEQUENCE = [
-    ('Rotate CCW',     STEER_ROTATE,  -1, 3.0),
-    ('Rotate CW',      STEER_ROTATE,  +1, 3.0),
-    ('Forward  (+X)',  STEER_FORWARD, -1, 3.0),
-    ('Backward (-X)',  STEER_FORWARD, +1, 3.0),
-    ('Slide Left (+Y)',STEER_LATERAL, -1, 3.0),
-    ('Slide Right(-Y)',STEER_LATERAL, +1, 3.0),
+    ('Rotate CCW',       0.0,       0.0,      +V_ANGULAR, 3.0),
+    ('Rotate CW',        0.0,       0.0,      -V_ANGULAR, 3.0),
+    ('Forward  (+X)',   +V_LINEAR,  0.0,       0.0,       3.0),
+    ('Backward (-X)',   -V_LINEAR,  0.0,       0.0,       3.0),
+    ('Slide Left (+Y)', 0.0,       +V_LINEAR,  0.0,       3.0),
+    ('Slide Right(-Y)', 0.0,       -V_LINEAR,  0.0,       3.0),
 ]
 
-STEER_PAUSE  = 0.5   # seconds between DRIVE and next STEER phase
+STEER_PAUSE  = 0.5   # seconds pause between drive and next steer phase
 STEER_MAXSEC = 3.5   # cap on steering transition time
+
+
+# ── Inverse kinematics ────────────────────────────────────────────────────────
+
+def _inverse_kinematics(vx, vy, omega):
+    """Compute (steer_angles, wheel_speeds) from body velocity.
+
+    Steering angles are clipped to [-π/2, π/2] by flipping wheel direction,
+    so mechanical collision from over-rotation is impossible.
+    """
+    steers, speeds = [], []
+    for a_i in LEG_ANGLES:
+        vwx = vx - math.sin(a_i) * omega * R_CONTACT
+        vwy = vy + math.cos(a_i) * omega * R_CONTACT
+        mag = math.hypot(vwx, vwy)
+        if mag < 1e-9:
+            steers.append(0.0)
+            speeds.append(0.0)
+            continue
+        rolling_dir = math.atan2(vwy, vwx)
+        phi = rolling_dir - math.pi / 2
+        s   = a_i - phi
+        s   = (s + math.pi) % (2 * math.pi) - math.pi   # wrap to [-π, π]
+        sign = 1.0
+        if s > math.pi / 2:      # clip to [-90°, +90°] by flipping wheel
+            s -= math.pi; sign = -1.0
+        elif s < -math.pi / 2:
+            s += math.pi; sign = -1.0
+        steers.append(s)
+        speeds.append(-sign * mag / R_WHEEL)
+    return steers, speeds
 
 
 # ── Dead-reckoning helpers ────────────────────────────────────────────────────
 
 def _body_velocity(steer, wheel_vel):
-    """Return [vx, vy, omega_z] in the robot body frame.
-
-    No-slip rolling constraint (derived via v_wheel_center + ω×r_contact = 0):
-      A(steer) · [vx, vy, wz] = -wheel_vel_i * R_WHEEL
-    Solved with numpy least-squares (robust near-singular during transitions).
-    """
+    """Return [vx, vy, omega_z] in robot body frame from joint states."""
     A = np.zeros((3, 3))
     b = np.zeros(3)
     for i, (a, s, wv, (px, py)) in enumerate(
             zip(LEG_ANGLES, steer, wheel_vel, P_CONTACT)):
-        phi = a - s                          # spin-axis angle in world(-body) frame
+        phi = a - s
         sp, cp = math.sin(phi), math.cos(phi)
         A[i] = [-sp, cp, sp*py + cp*px]
-        b[i] = -wv * R_WHEEL   # no-slip: A·v_body = -ω_wheel × R_wheel
+        b[i] = -wv * R_WHEEL
     v, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
-    return v  # [vx, vy, wz]
+    return v
 
 
 def _yaw_to_quat(yaw):
-    """Return (qx, qy, qz, qw) for a pure yaw rotation."""
     return 0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)
 
 
@@ -135,33 +143,24 @@ class MotionDemoNode(Node):
         self.declare_parameter('gazebo', False)
         self.gazebo_mode = self.get_parameter('gazebo').value
 
-        # Publishers
         if self.gazebo_mode:
             self.steer_pub = self.create_publisher(
                 Float64MultiArray, '/steering_controller/commands', 10)
             self.wheel_pub = self.create_publisher(
                 Float64MultiArray, '/wheel_controller/commands', 10)
-            self.get_logger().info(
-                'Gazebo mode — '
-                '/steering_controller/commands + /wheel_controller/commands')
+            self.get_logger().info('Gazebo mode')
         else:
             self.js_pub = self.create_publisher(JointState, 'joint_states', 10)
-            self.get_logger().info('RViz mode — /joint_states')
+            self.get_logger().info('RViz mode')
 
-        # TF broadcaster (world → base_footprint) for both modes
         self._tf_br = TransformBroadcaster(self)
 
-        # Robot state (protected by _lock)
         self._steer     = [0.0, 0.0, 0.0]
-        self._wheel_pos = [0.0, 0.0, 0.0]   # integrated for RViz animation
+        self._wheel_pos = [0.0, 0.0, 0.0]
         self._wheel_vel = [0.0, 0.0, 0.0]
-
-        # Dead-reckoning pose in world frame
-        self._x     = 0.0
-        self._y     = 0.0
-        self._theta = 0.0
-
         self._target_steer = [0.0, 0.0, 0.0]
+
+        self._x = self._y = self._theta = 0.0
         self._lock = threading.Lock()
 
         self._timer = self.create_timer(1.0 / PUBLISH_HZ, self._publish_cb)
@@ -175,30 +174,34 @@ class MotionDemoNode(Node):
 
         step = 0
         while rclpy.ok():
-            label, target_s, wsign, drive_sec = MOTION_SEQUENCE[step]
+            label, vx, vy, omega, drive_sec = MOTION_SEQUENCE[step]
 
-            # Steering transition (wheels stopped)
+            # Compute IK — steering guaranteed within [-90°, +90°]
+            target_steer, target_speeds = _inverse_kinematics(vx, vy, omega)
+
+            # Stop wheels, set new steering target
             with self._lock:
-                self._wheel_vel  = [0.0, 0.0, 0.0]
-                self._target_steer = list(target_s)
+                self._wheel_vel    = [0.0, 0.0, 0.0]
+                self._target_steer = target_steer
 
-            delta = max(abs(target_s[i] - self._steer[i]) for i in range(3))
+            delta = max(abs(target_steer[i] - self._steer[i]) for i in range(3))
             steer_sec = min(delta / STEER_RATE + 0.3, STEER_MAXSEC)
 
-            deg = [math.degrees(s) for s in target_s]
+            deg = [math.degrees(s) for s in target_steer]
+            spd = [f'{v:+.2f}' for v in target_speeds]
             self.get_logger().info(
                 f'\n{"─"*60}\n'
-                f'  NEXT: {label}\n'
-                f'  Steer → [{deg[0]:+.1f}°, {deg[1]:+.1f}°, {deg[2]:+.1f}°]\n'
+                f'  NEXT : {label}\n'
+                f'  Steer: [{deg[0]:+.1f}°, {deg[1]:+.1f}°, {deg[2]:+.1f}°]'
+                f'  (all within ±90°)\n'
+                f'  Speed: [{spd[0]}, {spd[1]}, {spd[2]}] rad/s\n'
                 f'{"─"*60}')
             time.sleep(steer_sec)
 
             # Drive
             with self._lock:
-                self._wheel_vel = [wsign * DRIVE_SPEED] * 3
-            self.get_logger().info(
-                f'  DRIVE  {drive_sec:.1f}s  '
-                f'({"+" if wsign > 0 else "-"}{DRIVE_SPEED} rad/s)')
+                self._wheel_vel = list(target_speeds)
+            self.get_logger().info(f'  DRIVE  {drive_sec:.1f}s')
             time.sleep(drive_sec)
 
             # Stop
@@ -219,24 +222,20 @@ class MotionDemoNode(Node):
         # Ramp steering toward target
         for i in range(3):
             diff = target_s[i] - self._steer[i]
-            self._steer[i] += math.copysign(
-                min(abs(diff), STEER_RATE * dt), diff)
+            self._steer[i] += math.copysign(min(abs(diff), STEER_RATE * dt), diff)
 
-        # Integrate wheel position for RViz animation
+        # Integrate wheel positions for RViz animation
         for i in range(3):
             self._wheel_pos[i] += wheel_vel[i] * dt
 
-        # Dead-reckoning: compute body velocity → integrate world pose
-        v = _body_velocity(self._steer, wheel_vel)  # [vx, vy, wz] in body frame
+        # Dead-reckoning pose
+        v = _body_velocity(self._steer, wheel_vel)
         ct, st = math.cos(self._theta), math.sin(self._theta)
         self._x     += (ct * v[0] - st * v[1]) * dt
         self._y     += (st * v[0] + ct * v[1]) * dt
         self._theta += v[2] * dt
 
-        # Publish TF: world → base_footprint
         self._publish_tf()
-
-        # Publish joint commands
         if self.gazebo_mode:
             self._publish_gazebo(wheel_vel)
         else:
@@ -247,17 +246,14 @@ class MotionDemoNode(Node):
         t.header.stamp    = self.get_clock().now().to_msg()
         t.header.frame_id = 'world'
         t.child_frame_id  = 'base_footprint'
-
         t.transform.translation.x = self._x
         t.transform.translation.y = self._y
         t.transform.translation.z = 0.0
-
         qx, qy, qz, qw = _yaw_to_quat(self._theta)
         t.transform.rotation.x = qx
         t.transform.rotation.y = qy
         t.transform.rotation.z = qz
         t.transform.rotation.w = qw
-
         self._tf_br.sendTransform(t)
 
     def _publish_gazebo(self, wheel_vel):
