@@ -1,4 +1,4 @@
-# Independently Steered 3-Wheeled Cling Robot With Parallel Manipulator
+# Independently Steered 3-Wheeled Cling Robot
 
 A research repository for the wheeled Cling robot — a 3-wheel-driving, 3-wheel-steering (3D3S) omnidirectional mobile robot.
 
