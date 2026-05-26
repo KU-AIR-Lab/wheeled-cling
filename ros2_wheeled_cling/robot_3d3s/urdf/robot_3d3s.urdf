@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  3-wheeled 3D3S omnidirectional robot
+  Each leg: base_link -> steering_N_link (revolute, vertical axis) -> wheel_N_link (continuous)
+  Generated using SolidWorks URDF Exporter, edited for correct limits and inertia.
+-->
+<robot name="robot_3d3s">
+
+  <!-- ====================== BASE FOOTPRINT ====================== -->
+  <!-- Virtual ground-plane link at wheel-contact height (z≈0 from base_link). -->
+  <link name="base_footprint"/>
+  <joint name="base_footprint_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+  </joint>
+
+  <!-- ======================== BASE LINK ======================== -->
+  <!-- Main robot body. All three steering legs attach here. -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0.00054034 5.1289E-09 0.28559" rpy="0 0 0" />
+      <mass value="6.0461" />
+      <inertia
+        ixx="0.02261"  ixy="1.2023E-09" ixz="2.1633E-10"
+        iyy="0.02261"  iyz="-4.0683E-10"
+        izz="0.039117" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/base_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.5 0.5 0.5 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- ==================== LEG 1 — STEERING ==================== -->
+  <!-- Steering assembly for wheel 1 (front). Rotates around vertical Z axis. -->
+  <link name="steering_1_link">
+    <inertial>
+      <origin xyz="0.00045928 -9.1606E-12 0.12605" rpy="0 0 0" />
+      <mass value="0.53024" />
+      <inertia
+        ixx="0.00056656"  ixy="-1.8538E-13" ixz="-7.4564E-08"
+        iyy="0.00052285"  iyz="7.8557E-14"
+        izz="0.00030054" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/steering_1_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0 0.5 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/steering_1_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!--
+    Steering joint 1 — revolute around local Z (vertical axis after parent transform).
+    Limits: ±2.618 rad (±150°) giving a 300° total range to avoid body collision.
+  -->
+  <joint name="steering_1_joint" type="revolute">
+    <origin xyz="0.38905 0 0.225" rpy="3.1416 0 0" />
+    <parent link="base_link" />
+    <child  link="steering_1_link" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.618" upper="2.618" effort="10" velocity="10" />
+  </joint>
+
+  <!-- ==================== LEG 1 — WHEEL ==================== -->
+  <!-- Drive wheel 1. Continuous joint — spins freely around its axle. -->
+  <link name="wheel_1_link">
+    <inertial>
+      <origin xyz="-0.025 -2.7756E-17 -5.2963E-19" rpy="0 0 0" />
+      <mass value="0.3566" />
+      <inertia
+        ixx="0.00048671"  ixy="2.1534E-20"  ixz="-6.1158E-21"
+        iyy="0.00031774"  iyz="-2.7551E-22"
+        izz="0.00031755" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/wheel_1_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.2 0.2 0.2 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.025 0 0" rpy="0 1.5708 0" />
+      <geometry>
+        <cylinder radius="0.05" length="0.05"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Wheel 1 spins around the X axis of this joint frame (perpendicular to wheel face). -->
+  <joint name="wheel_1_joint" type="continuous">
+    <origin xyz="0.025 0 0.17497" rpy="-1.5708 0 0" />
+    <parent link="steering_1_link" />
+    <child  link="wheel_1_link" />
+    <axis xyz="1 0 0" />
+    <limit effort="10" velocity="10" />
+  </joint>
+
+  <!-- ==================== LEG 2 — STEERING ==================== -->
+  <!-- Steering assembly for wheel 2 (rear-left), offset 120° from leg 1. -->
+  <link name="steering_2_link">
+    <inertial>
+      <origin xyz="0.00045928 -8.9114E-12 0.12605" rpy="0 0 0" />
+      <mass value="0.53024" />
+      <inertia
+        ixx="0.00056656"  ixy="-1.8531E-13" ixz="-7.4564E-08"
+        iyy="0.00052285"  iyz="7.8355E-14"
+        izz="0.00030054" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/steering_2_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0 0.5 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/steering_2_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Steering joint 2 — same limits as joint 1. -->
+  <joint name="steering_2_joint" type="revolute">
+    <origin xyz="-0.19453 0.33693 0.225" rpy="3.1416 0 2.0944" />
+    <parent link="base_link" />
+    <child  link="steering_2_link" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.618" upper="2.618" effort="10" velocity="10" />
+  </joint>
+
+  <!-- ==================== LEG 2 — WHEEL ==================== -->
+  <!-- Drive wheel 2 — continuous, same inertia as wheel 1. -->
+  <link name="wheel_2_link">
+    <inertial>
+      <origin xyz="-0.025 0 5.5511E-17" rpy="0 0 0" />
+      <mass value="0.3566" />
+      <inertia
+        ixx="0.00048671"  ixy="2.2267E-20"  ixz="4.0658E-20"
+        iyy="0.00031774"  iyz="-9.0783E-22"
+        izz="0.00031755" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/wheel_2_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.2 0.2 0.2 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.025 0 0" rpy="0 1.5708 0" />
+      <geometry>
+        <cylinder radius="0.05" length="0.05"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wheel_2_joint" type="continuous">
+    <origin xyz="0.025 0 0.17497" rpy="-1.5708 0 0" />
+    <parent link="steering_2_link" />
+    <child  link="wheel_2_link" />
+    <axis xyz="1 0 0" />
+    <limit effort="10" velocity="10" />
+  </joint>
+
+  <!-- ==================== LEG 3 — STEERING ==================== -->
+  <!--
+    Steering assembly for wheel 3 (rear-right), offset 240° from leg 1.
+    NOTE: SolidWorks exported zero inertia for this link — fixed by using the
+    same measured values as steering_1 and steering_2 (identical part).
+  -->
+  <link name="steering_3_link">
+    <inertial>
+      <origin xyz="0.00045928 -9.1606E-12 0.12605" rpy="0 0 0" />
+      <mass value="0.53024" />
+      <inertia
+        ixx="0.00056656"  ixy="-1.8538E-13" ixz="-7.4564E-08"
+        iyy="0.00052285"  iyz="7.8557E-14"
+        izz="0.00030054" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/steering_3_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0 0.5 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/steering_3_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Steering joint 3 — same limits as joints 1 and 2. -->
+  <joint name="steering_3_joint" type="revolute">
+    <origin xyz="-0.19453 -0.33693 0.225" rpy="3.1416 0 -2.0944" />
+    <parent link="base_link" />
+    <child  link="steering_3_link" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.618" upper="2.618" effort="10" velocity="10" />
+  </joint>
+
+  <!-- ==================== LEG 3 — WHEEL ==================== -->
+  <!-- Drive wheel 3 — continuous, same inertia as wheels 1 and 2. -->
+  <link name="wheel_3_link">
+    <inertial>
+      <origin xyz="-0.025 -2.7756E-17 0" rpy="0 0 0" />
+      <mass value="0.3566" />
+      <inertia
+        ixx="0.00048671"  ixy="2.3818E-20"  ixz="2.7105E-20"
+        iyy="0.00031774"  iyz="-1.7287E-21"
+        izz="0.00031755" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_3d3s/meshes/wheel_3_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.2 0.2 0.2 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.025 0 0" rpy="0 1.5708 0" />
+      <geometry>
+        <cylinder radius="0.05" length="0.05"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wheel_3_joint" type="continuous">
+    <origin xyz="0.025 0 0.17497" rpy="-1.5708 0 0" />
+    <parent link="steering_3_link" />
+    <child  link="wheel_3_link" />
+    <axis xyz="1 0 0" />
+    <limit effort="10" velocity="10" />
+  </joint>
+
+
+  <!-- =================== ros2_control — Gazebo simulation hardware =================== -->
+  <ros2_control name="robot_3d3s" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <joint name="steering_1_joint">
+      <command_interface name="position">
+        <param name="min">-2.618</param>
+        <param name="max"> 2.618</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="steering_2_joint">
+      <command_interface name="position">
+        <param name="min">-2.618</param>
+        <param name="max"> 2.618</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="steering_3_joint">
+      <command_interface name="position">
+        <param name="min">-2.618</param>
+        <param name="max"> 2.618</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="wheel_1_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="wheel_2_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="wheel_3_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+  <!-- gz_ros2_control Gazebo plugin — controllers.yaml path injected by gazebo.launch.py -->
+  <gazebo>
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>CONTROLLERS_YAML_PATH</parameters>
+    </plugin>
+  </gazebo>
+
+</robot>
