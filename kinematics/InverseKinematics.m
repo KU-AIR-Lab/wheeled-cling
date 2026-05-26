@@ -12,11 +12,11 @@ d = 100e-3; % wheel diameter
 R1 = [cosd(90)   -sind(90);
       sind(90)    cosd(90)];
 
-R2 = [cosd(-30)  -sind(-30);
-      sind(-30)   cosd(-30)];
-
-R3 = [cosd(210)  -sind(210);
+R2 = [cosd(210)  -sind(210);
       sind(210)   cosd(210)];
+
+R3 = [cosd(-30)  -sind(-30);
+      sind(-30)   cosd(-30)];
 
 % =======================================================================
 % MOTION COMMANDS
@@ -47,7 +47,7 @@ R3 = [cosd(210)  -sind(210);
 % Vy = 0.03;
 % Omega = 0;
 
-% % Pure rotation
+% Pure rotation
 Vx = 0;
 Vy = 0;
 Omega = 0.1;
@@ -72,8 +72,8 @@ tol = 1e-12;
 
 % Wheel-frame orientations in robot frame
 alpha1 = pi/2;
-alpha2 = -30*pi/180;
-alpha3 = 210*pi/180;
+alpha2 = 210*pi/180;
+alpha3 = -30*pi/180;
 
 % -----------------------------------------------------------------------
 % Wheel 1
@@ -136,14 +136,14 @@ Theta3 = alpha3 + angle3;
 % DRAW ROBOT
 
 P_top   = [0, R + R*sind(30)];
-P_right = [ R*cosd(30), 0];
 P_left  = [-R*cosd(30), 0];
+P_right = [ R*cosd(30), 0];
 
 O = [0, R*sind(30)];
 
 W1 = P_top;
-W2 = P_right;
-W3 = P_left;
+W2 = P_left;
+W3 = P_right;
 
 figure;
 hold on;
@@ -171,18 +171,18 @@ text(O(1)-0.03, O(2)+0.02, 'O', ...
 % Vertices
 
 A = P_top;
-B = P_right;
-C = P_left;
+B = P_left;
+C = P_right;
 
 text(A(1)-0.03, A(2)+0.025, 'A', ...
     'FontWeight', 'bold', ...
     'BackgroundColor', 'w');
 
-text(B(1)+0.025, B(2)-0.035, 'B', ...
+text(B(1)-0.04, B(2)-0.035, 'B', ...
     'FontWeight', 'bold', ...
     'BackgroundColor', 'w');
 
-text(C(1)-0.04, C(2)-0.035, 'C', ...
+text(C(1)+0.025, C(2)-0.035, 'C', ...
     'FontWeight', 'bold', ...
     'BackgroundColor', 'w');
 
@@ -343,7 +343,7 @@ end
 xlabel('X [m]');
 ylabel('Y [m]');
 
-title('Top View of 3-Wheeled Triangle Robot');
+title('Top View of 3D3S Robot');
 
 axis([-0.5 0.5 -0.1 0.7]);
 
