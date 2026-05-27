@@ -7,20 +7,24 @@ clc
 R = 389e-3; % robot circumradius
 d = 100e-3; % wheel diameter
 
-% Transformation from robot frame to pyramid-segment-fixed frames
+% Local frame orientations in robot frame
+alpha1 = 0*pi/180;
+alpha2 = 120*pi/180;
+alpha3 = 240*pi/180;
 
-R1 = [cosd(90)   -sind(90);
-      sind(90)    cosd(90)];
+% Transformation from local wheel frames to robot frame
+R1 = [cos(alpha1)  -sin(alpha1);
+      sin(alpha1)   cos(alpha1)];
 
-R2 = [cosd(210)  -sind(210);
-      sind(210)   cosd(210)];
+R2 = [cos(alpha2)  -sin(alpha2);
+      sin(alpha2)   cos(alpha2)];
 
-R3 = [cosd(-30)  -sind(-30);
-      sind(-30)   cosd(-30)];
+R3 = [cos(alpha3)  -sin(alpha3);
+      sin(alpha3)   cos(alpha3)];
 
 % =======================================================================
 % MOTION COMMANDS
-% Uncomment to apply
+% Uncomment one case to apply
 
 % % Robot moving forward
 % Vx = 0;
@@ -58,8 +62,11 @@ Omega = 0.1;
 Yaw = atan2(Vy,Vx);
 V_mag = sqrt(Vx^2 + Vy^2);
 
-V   = [Vx; Vy];
-Vti = [0; Omega*R];
+V = [Vx; Vy];
+
+% Tangential velocity at each wheel for pure rotation.
+% In each local frame, zero steering is aligned with the pure-rotation wheel direction.
+Vti = [Omega*R; 0];
 
 Vt1 = R1*Vti;
 Vt2 = R2*Vti;
@@ -69,11 +76,6 @@ tol = 1e-12;
 
 % =======================================================================
 % INVERSE KINEMATICS
-
-% Wheel-frame orientations in robot frame
-alpha1 = pi/2;
-alpha2 = 210*pi/180;
-alpha3 = -30*pi/180;
 
 % -----------------------------------------------------------------------
 % Wheel 1
@@ -89,7 +91,6 @@ V1_mag = sqrt(V1x^2 + V1y^2);
 Omega1 = V1_mag/(d/2);
 
 angle1_raw = wrapToPi(Theta1_raw - alpha1);
-
 [angle1, Omega1] = limitSteeringAngle(angle1_raw, Omega1);
 
 Theta1 = alpha1 + angle1;
@@ -108,7 +109,6 @@ V2_mag = sqrt(V2x^2 + V2y^2);
 Omega2 = V2_mag/(d/2);
 
 angle2_raw = wrapToPi(Theta2_raw - alpha2);
-
 [angle2, Omega2] = limitSteeringAngle(angle2_raw, Omega2);
 
 Theta2 = alpha2 + angle2;
@@ -127,7 +127,6 @@ V3_mag = sqrt(V3x^2 + V3y^2);
 Omega3 = V3_mag/(d/2);
 
 angle3_raw = wrapToPi(Theta3_raw - alpha3);
-
 [angle3, Omega3] = limitSteeringAngle(angle3_raw, Omega3);
 
 Theta3 = alpha3 + angle3;
@@ -225,9 +224,9 @@ text(O(1)-0.015, O(2)+frameLen+0.01, ...
 
 localLen = 0.08;
 
-drawLocalFrame(A, O, localLen, '1');
-drawLocalFrame(B, O, localLen, '2');
-drawLocalFrame(C, O, localLen, '3');
+drawLocalFrame(A, localLen, alpha1, '1');
+drawLocalFrame(B, localLen, alpha2, '2');
+drawLocalFrame(C, localLen, alpha3, '3');
 
 % -----------------------------------------------------------------------
 % Wheels
@@ -316,8 +315,8 @@ if abs(Omega) < tol && abs(V_mag) > tol
 
     arrowLength = 0.18;
 
-    ux = cos(Yaw);
-    uy = sin(Yaw);
+    ux = Vx/V_mag;
+    uy = Vy/V_mag;
 
     quiver(O(1), O(2), ...
         arrowLength*ux, ...
@@ -337,8 +336,6 @@ elseif abs(V_mag) < tol && abs(Omega) > tol
         drawCircularArrow(O, arcRadius, 'CW', 'r');
     end
 end
-
-% -----------------------------------------------------------------------
 
 xlabel('X [m]');
 ylabel('Y [m]');
@@ -412,12 +409,10 @@ end
 
 % =======================================================================
 
-function drawLocalFrame(P, O, len, labelNum)
+function drawLocalFrame(P, len, alpha, labelNum)
 
-    xAxis = (P - O);
-    xAxis = xAxis/norm(xAxis);
-
-    yAxis = [-xAxis(2), xAxis(1)];
+    xAxis = [cos(alpha), sin(alpha)];
+    yAxis = [-sin(alpha), cos(alpha)];
 
     quiver(P(1), P(2), ...
         len*xAxis(1), ...
@@ -435,15 +430,15 @@ function drawLocalFrame(P, O, len, labelNum)
         'LineWidth', 1.8, ...
         'MaxHeadSize', 1.2);
 
-    text(P(1)+1.40*len*xAxis(1), ...
-         P(2)+1.40*len*xAxis(2), ...
+    text(P(1)+1.35*len*xAxis(1), ...
+         P(2)+1.35*len*xAxis(2), ...
          ['X_' labelNum '^+'], ...
          'Color', 'm', ...
          'FontWeight', 'bold', ...
          'BackgroundColor', 'w');
 
-    text(P(1)+1.20*len*yAxis(1), ...
-         P(2)+1.30*len*yAxis(2), ...
+    text(P(1)+1.25*len*yAxis(1), ...
+         P(2)+1.25*len*yAxis(2), ...
          ['Y_' labelNum '^+'], ...
          'Color', 'm', ...
          'FontWeight', 'bold', ...
