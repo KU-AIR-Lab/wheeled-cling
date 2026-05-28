@@ -177,4 +177,5 @@ See `kinematics/InverseKinematics.m` for the MATLAB reference implementation.
 ## Author
 
 Yersaiyn Bushanovy — Nazarbayev University  
+Abdur Rosyid
 KU AIR Lab
