@@ -51,11 +51,12 @@ sudo apt install \
 ---
 
 ## Build
+After cloning and before building, make sure that all the Python files have executable permission. If not, perform chmod +x to them.
 
 ```bash
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
-git clone https://github.com/bushanovy/wheeled-cling.git
+git clone https://github.com/KU-AIR-Lab/wheeled-cling.git
 cd ~/ros2_ws
 colcon build --packages-select robot_3d3s
 source install/setup.bash
@@ -125,7 +126,8 @@ ros2 run robot_3d3s teleop_keyboard.py --ros-args -p gazebo:=true
 ros2 launch robot_3d3s nav2.launch.py
 ```
 
-**Gazebo + Nav2:**
+**RViz + Gazebo:**
+Here Gazebo will be a co-simulation along with Rviz.
 ```bash
 ros2 launch robot_3d3s nav2.launch.py gazebo:=true
 ```
