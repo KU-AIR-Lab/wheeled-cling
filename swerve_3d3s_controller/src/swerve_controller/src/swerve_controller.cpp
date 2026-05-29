@@ -1,4 +1,6 @@
-// CPP File
+// Swerve Controller for 3-Drive 3-Steer (3D3S) Robot
+// Adapted from https://github.com/RoboEagles4828/ros2-swerve-controller
+// Authored by Bence Magyar, Enrique Fernández, Manuel Meraz
 
 /*
  * Author: Abdur Rosyid
