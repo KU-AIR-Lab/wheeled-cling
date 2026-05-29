@@ -17,9 +17,13 @@ install(DIRECTORY
 install(PROGRAMS
   scripts/joint_control_gui.py
   scripts/motion_demo.py
+  scripts/motion_demo_swerve.py
   scripts/teleop_keyboard.py
+  scripts/teleop_keyboard_swerve.py  
+  scripts/teleop_keyboard_swerve_gazebo.py  
   scripts/odom_node.py
   scripts/cmd_vel_to_wheels.py
+  scripts/cmd_vel_stamper.py  
   DESTINATION lib/${PROJECT_NAME}
 )
 

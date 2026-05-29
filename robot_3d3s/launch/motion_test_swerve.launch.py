@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('robot_3d3s')
-    urdf_file  = os.path.join(pkg_share, 'urdf', 'robot_3d3s.urdf')
+    urdf_file = os.path.join(pkg_share, 'urdf', 'robot_3d3s.urdf')
     rviz_config = os.path.join(pkg_share, 'config', 'display.rviz')
 
     with open(urdf_file, 'r') as f:
@@ -14,7 +14,7 @@ def generate_launch_description():
 
     return LaunchDescription([
 
-        # Broadcasts TF from joint states + URDF
+        # Broadcasts TF from /joint_states + URDF.
         Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
@@ -22,15 +22,23 @@ def generate_launch_description():
             output='screen',
         ),
 
-        # Automated motion-demo node (RViz mode — publishes /joint_states)
+        # RViz-only automated motion demo.
+        # Since Gazebo / ros2_control is not running here, this node must publish
+        # both /joint_states and a simple world -> base_footprint TF for RViz.
         Node(
             package='robot_3d3s',
-            executable='motion_demo.py',
-            name='motion_demo',
+            executable='motion_demo_swerve.py',
+            name='motion_demo_swerve',
+            parameters=[{
+                'publish_joint_states': True,
+                'publish_demo_tf': True,
+                'odom_frame': 'world',
+                'base_frame': 'base_footprint',
+            }],
             output='screen',
         ),
 
-        # RViz2 visualizer
+        # RViz2 visualizer.
         Node(
             package='rviz2',
             executable='rviz2',

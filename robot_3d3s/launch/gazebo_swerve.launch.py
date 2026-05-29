@@ -11,7 +11,7 @@ def generate_launch_description():
 
     urdf_file       = os.path.join(pkg, 'urdf', 'robot_3d3s.urdf')
     world_path      = os.path.join(pkg, 'worlds', 'my_world.sdf')
-    controllers_yaml = os.path.join(pkg, 'config', 'controllers.yaml')
+    controllers_yaml = os.path.join(pkg, 'config', 'swerve_controller.yaml')
 
     # Read URDF and inject the absolute path to controllers.yaml into the
     # gz_ros2_control plugin tag (replaces the CONTROLLERS_YAML_PATH placeholder).
@@ -86,6 +86,5 @@ def generate_launch_description():
         bridge,
         world_tf,
         spawner('joint_state_broadcaster', delay=8.0),
-        spawner('steering_controller',     delay=10.0),
-        spawner('wheel_controller',        delay=12.0),
+        spawner('swerve_controller',       delay=12.0),
     ])

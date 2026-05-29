@@ -1,46 +1,45 @@
 """
-nav2.launch.py  —  Navigation2 launch for the 3D3S robot.
+nav2_swerve.launch.py  -  Navigation2 launch for the 3D3S robot using swerve_controller.
 
 Launches the full navigation stack in either RViz-only or Gazebo mode.
 
-RViz mode (default — no physics, pure visualization):
-  ros2 launch robot_3d3s nav2.launch.py
+RViz mode (default - no physics, pure visualization):
+  ros2 launch robot_3d3s nav2_swerve.launch.py
 
 Gazebo mode (real physics):
-  ros2 launch robot_3d3s nav2.launch.py gazebo:=true
+  ros2 launch robot_3d3s nav2_swerve.launch.py gazebo:=true
 
 What this launches
 ------------------
 Both modes:
-  - robot_state_publisher    (URDF → TF)
-  - odom_node                (/joint_states → /odom + TF odom→base_footprint)
-  - cmd_vel_to_wheels        (/cmd_vel → steering + wheel commands)
+  - robot_state_publisher    (URDF -> TF)
+  - odom_node                (/joint_states -> /odom + TF odom->base_footprint)
   - nav2 nodes               (planner, controller, bt_navigator, ...)
   - RViz2                    (with nav2 panel for setting goals)
-  - static TF: map → odom    (identity — nav2 needs the map frame)
+  - static TF: map -> odom   (identity - nav2 needs the map frame)
+
+RViz mode only:
+  - cmd_vel_to_wheels        (/cmd_vel -> /joint_states visualization)
 
 Gazebo only:
   - Gazebo Sim               (physics)
-  - ros2_control controllers (steering + wheel)
+  - ros2_control controllers (joint_state_broadcaster + swerve_controller)
   - ros_gz_bridge            (/clock)
+  - cmd_vel_stamper.py       (/cmd_vel Twist -> /swerve_controller/cmd_vel TwistStamped)
 
-cmd_vel pipeline (no collision_monitor — no sensors)
------------------------------------------------------
-  controller_server → /cmd_vel_nav → velocity_smoother → /cmd_vel
-  → cmd_vel_to_wheels → robot
+cmd_vel pipeline in Gazebo mode
+-------------------------------
+  controller_server -> /cmd_vel_nav -> velocity_smoother -> /cmd_vel
+  -> cmd_vel_stamper.py -> /swerve_controller/cmd_vel -> swerve_controller -> robot
 
-How to navigate
----------------
-1. Wait for all nodes to start (Gazebo mode: ~15 s for controllers)
-2. In RViz: click "2D Goal Pose" → click anywhere on the grid
-3. Nav2 plans a path and the robot drives autonomously
+This keeps swerve_controller.yaml compatible with:
+  use_stamped_vel: true
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
-                             TimerAction)
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -48,12 +47,12 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    pkg       = get_package_share_directory('robot_3d3s')
+    pkg = get_package_share_directory('robot_3d3s')
 
-    urdf_file        = os.path.join(pkg, 'urdf', 'robot_3d3s.urdf')
+    urdf_file = os.path.join(pkg, 'urdf', 'robot_3d3s.urdf')
     nav2_params_file = os.path.join(pkg, 'config', 'nav2_params.yaml')
-    controllers_yaml = os.path.join(pkg, 'config', 'controllers.yaml')
-    world_path       = os.path.join(pkg, 'worlds', 'my_world.sdf')
+    controllers_yaml = os.path.join(pkg, 'config', 'swerve_controller.yaml')
+    world_path = os.path.join(pkg, 'worlds', 'my_world.sdf')
     nav2_rviz_config = os.path.join(pkg, 'config', 'nav2.rviz')
 
     with open(urdf_file, 'r') as f:
@@ -61,17 +60,17 @@ def generate_launch_description():
     robot_desc_gz = robot_desc.replace('CONTROLLERS_YAML_PATH', controllers_yaml)
 
     gazebo_arg = DeclareLaunchArgument(
-        'gazebo', default_value='false',
-        description='true = use Gazebo physics, false = RViz-only')
+        'gazebo',
+        default_value='false',
+        description='true = use Gazebo physics, false = RViz-only',
+    )
     gazebo = LaunchConfiguration('gazebo')
 
-    # ── Shared nodes (both modes) ─────────────────────────────────────────────
-
+    # Shared nodes
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[{'robot_description': robot_desc,
-                     'use_sim_time': True}],
+        parameters=[{'robot_description': robot_desc, 'use_sim_time': True}],
         output='screen',
     )
 
@@ -82,7 +81,6 @@ def generate_launch_description():
         output='screen',
     )
 
-    # TF chain: world → map → odom → base_footprint
     world_to_map = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -99,16 +97,8 @@ def generate_launch_description():
         output='screen',
     )
 
-    # ── nav2 nodes (individual — collision_monitor skipped, no sensors) ───────
-    #
-    # cmd_vel routing:
-    #   controller_server  publishes to /cmd_vel_nav   (remap cmd_vel→cmd_vel_nav)
-    #   behavior_server    publishes to /cmd_vel_nav   (same remap)
-    #   velocity_smoother  subscribes /cmd_vel_nav, publishes /cmd_vel
-    #                      (remap input cmd_vel→cmd_vel_nav, output cmd_vel_smoothed→cmd_vel)
-
     tf_remaps = [('/tf', 'tf'), ('/tf_static', 'tf_static')]
-    params   = [nav2_params_file, {'use_sim_time': True}]
+    params = [nav2_params_file, {'use_sim_time': True}]
 
     controller_server = Node(
         package='nav2_controller',
@@ -173,9 +163,21 @@ def generate_launch_description():
         output='screen',
         parameters=params,
         remappings=tf_remaps + [
-            ('cmd_vel',          'cmd_vel_nav'),  # input from controller
-            ('cmd_vel_smoothed', 'cmd_vel'),      # output directly to robot
+            ('cmd_vel', 'cmd_vel_nav'),
+            ('cmd_vel_smoothed', 'cmd_vel'),
         ],
+    )
+
+    cmd_vel_stamper = Node(
+        package='robot_3d3s',
+        executable='cmd_vel_stamper.py',
+        name='cmd_vel_stamper',
+        output='screen',
+        remappings=[
+            ('cmd_vel_in', '/cmd_vel'),
+            ('cmd_vel_out', '/swerve_controller/cmd_vel'),
+        ],
+        condition=IfCondition(gazebo),
     )
 
     docking_server = Node(
@@ -218,8 +220,7 @@ def generate_launch_description():
         output='screen',
     )
 
-    # ── RViz mode ─────────────────────────────────────────────────────────────
-
+    # RViz-only mode: keep the old visualization bridge.
     cmd_vel_rviz = Node(
         package='robot_3d3s',
         executable='cmd_vel_to_wheels.py',
@@ -229,12 +230,11 @@ def generate_launch_description():
         condition=UnlessCondition(gazebo),
     )
 
-    # ── Gazebo mode ───────────────────────────────────────────────────────────
-
+    # Gazebo mode
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('ros_gz_sim'),
-                         'launch', 'gz_sim.launch.py')),
+            os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
+        ),
         launch_arguments={'gz_args': f'-r -v 4 {world_path}'}.items(),
         condition=IfCondition(gazebo),
     )
@@ -242,8 +242,11 @@ def generate_launch_description():
     spawn_robot = Node(
         package='ros_gz_sim',
         executable='create',
-        arguments=['-name', 'robot_3d3s', '-string', robot_desc_gz,
-                   '-x', '0', '-y', '0', '-z', '0.2'],
+        arguments=[
+            '-name', 'robot_3d3s',
+            '-string', robot_desc_gz,
+            '-x', '0', '-y', '0', '-z', '0.2',
+        ],
         output='screen',
         condition=IfCondition(gazebo),
     )
@@ -265,15 +268,6 @@ def generate_launch_description():
             condition=IfCondition(gazebo),
         )])
 
-    cmd_vel_gazebo = Node(
-        package='robot_3d3s',
-        executable='cmd_vel_to_wheels.py',
-        name='cmd_vel_to_wheels',
-        parameters=[{'gazebo': True}],
-        output='screen',
-        condition=IfCondition(gazebo),
-    )
-
     return LaunchDescription([
         gazebo_arg,
 
@@ -283,7 +277,7 @@ def generate_launch_description():
         map_to_odom,
         odom_node,
 
-        # nav2 nodes (no collision_monitor)
+        # Nav2 nodes
         controller_server,
         smoother_server,
         planner_server,
@@ -292,6 +286,7 @@ def generate_launch_description():
         bt_navigator,
         waypoint_follower,
         velocity_smoother,
+        cmd_vel_stamper,
         docking_server,
         lifecycle_manager,
 
@@ -305,7 +300,5 @@ def generate_launch_description():
         spawn_robot,
         clock_bridge,
         spawner('joint_state_broadcaster', delay=8.0),
-        spawner('steering_controller',     delay=10.0),
-        spawner('wheel_controller',        delay=12.0),
-        cmd_vel_gazebo,
+        spawner('swerve_controller', delay=10.0),
     ])
